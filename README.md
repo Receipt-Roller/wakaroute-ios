@@ -1,93 +1,75 @@
-# wakaroute-ios
+# WakaRoute iOS
 
-iOS client for [ワカルート / WakaRoute](https://wakaroute.com) — a free service
-for Japanese middle-school students (中学生) preparing for high school entrance
-exams (高校受験).
+[ワカルート（WakaRoute）](https://wakaroute.com)のiOSアプリです。高校受験にむけて学ぶ中学生が、「いまどこにいるか」と「次に何をすればいいか」を自分で見られるようにすることを目指しています。
 
-Its one idea: **when a student is stuck, send them back to the cause, not the
-symptom.** A student failing 一次関数 is often not stuck on 一次関数 — the gap is
-文字を用いた式, two steps earlier. Drilling the thing that hurts does not help. So
-the app carries a prerequisite graph over the curriculum, walks backwards from
-what a student cannot do to the earliest thing genuinely missing, and points
-there.
+ワカルートは株式会社レシートローラーが開発する、無料のオープンソースプロジェクトです。特定の学校、教育委員会、文部科学省が運営する公式サービスではありません。
 
-Built by [株式会社レシートローラー](https://receiptroller.co).
+Webアプリは [wakaroute-web](https://github.com/Receipt-Roller/wakaroute-web) にあります。
 
-## Status
+## このアプリの考え方
 
-Submitting as **1.1.0**, iPhone and iPad, minimum iOS 17.0.
+**つまずいたら、症状ではなく原因まで戻す。**
 
-| Area | State |
+一次関数が解けない生徒は、一次関数でつまずいているとはかぎりません。二つ手前の「文字を用いた式」が固まっていないことがよくあります。そこを放置したまま一次関数を何度練習しても、あまり進みません。
+
+このアプリは教科の中の**前提関係のグラフ**を持っていて、解けない要素からさかのぼり、**本当に足りていない一番手前の要素**を見つけて、そこを示します。
+
+## いまの状態
+
+**1.1.0** を審査に提出中です。iPhone / iPad、最低対応は iOS 17.0。
+
+| 機能 | 状態 |
 |---|---|
-| Silent device registration, token lifecycle, account handover | Working, verified against production |
-| Lessons, 確認クイズ, offline replay | Working |
-| Home on real progress — goal, streak, what to do next | Working |
-| 理解マップ (prerequisite graph) | 数学 only; the other four subjects need their edges authored |
-| Lesson feedback (わかった / むずかしかった) | Working |
-| In-app 利用規約 / プライバシーポリシー | Working, readable offline |
-| 確認テスト (`/tests/{id}`) | Not exercised — no tests authored yet |
-| Forced update | Client done, waiting on the endpoint |
+| 端末登録・トークン更新・記録の引き継ぎ | 動作、本番で確認済み |
+| レッスン、確認クイズ、オフライン再送 | 動作 |
+| ホーム（目標・連続日数・つぎにやること） | 動作、実データ |
+| 理解マップ（前提関係グラフ） | 数学のみ。他4教科は辺の作成待ち |
+| レッスン評価（わかった / むずかしかった） | 動作 |
+| アプリ内の利用規約・プライバシーポリシー | 動作、オフラインでも読める |
+| 確認テスト | 未検証。テストがまだ1件も作られていないため |
+| 強制アップデート | クライアント側は完了、配信エンドポイント待ち |
 
-## Design notes
+## 設計上の判断
 
-The comments in this repository carry the reasoning rather than the mechanics.
-A few decisions worth knowing before reading:
+このリポジトリのコメントは、**やり方ではなく理由**を書いています。読む前に知っておくと早いものをいくつか。
 
-**Students never sign in.** The app registers a device silently on first launch
-and stores a `deviceSecret` in the Keychain. There is no sign-up screen, because
-a 中学生 who has to make an account will not make one. Email is optional and only
-for moving to a new phone — framed throughout as 「学習記録を引き継ぐ」, never as
-「アカウント登録」.
+**生徒はログインしません。** 初回起動で端末を登録し、`deviceSecret` をキーチェーンに保存します。サインアップ画面は作っていません。**アカウントを作らないと試せないアプリを、中学生は作りません。** メールアドレスは任意で、機種変更のときだけ使います。文言も一貫して「学習記録を引き継ぐ」であって「アカウント登録」ではありません。
 
-**Nothing invents a number.** No score is shown when the app cannot grade
-offline. Only the first three of the five mastery levels are derivable today, so
-the app reports three and marks the rest 準備中 — a student has not failed a
-level nobody can measure yet.
+**数字をでっち上げません。** オフラインで採点できないときは点数を出しません。理解度の5段階のうち、いま根拠をもって出せるのは3段階までなので、3段階しか出さず、残りは「準備中」と書きます。**誰も測れないレベルで、生徒が落第したことにはできません。**
 
-**"Blocked" and "stumbling" are different things.** Everything a student has not
-reached is blocked; on a first launch, 23 of 26 元素 are. Reporting that as
-手前でつまずき would light a warning on every subject, permanently, and mean
-nothing. A stumble needs evidence: a quiz sat and missed.
+**「まだ届いていない」と「つまずいた」は別ものです。** まだたどり着いていない要素はすべて blocked です。初回起動では26要素中23個がそうです。それを「手前でつまずき」と呼ぶと、学習を始めた全生徒の全教科で警告が点灯し続け、意味を失います。つまずきには証拠が要ります — **クイズを受けて落ちたこと**です。
 
-**Work is never lost to a bad network.** Study time, lesson completions, quiz
-submissions and feedback queue locally and replay, reusing the original
-`Idempotency-Key` so a replay is the same attempt rather than a second one.
-Permanent failures — a deleted lesson — are set aside so they cannot block the
-queue behind them.
+**通信状況で学習が消えません。** 学習時間、レッスン完了、クイズ提出、評価は、送れなければ端末に貯めて後で送ります。最初の `Idempotency-Key` を使い回すので、再送は「同じ1回」であって2回目の挑戦にはなりません。削除されたレッスンのような**恒久的な失敗は脇に避けて**、後ろに詰まらないようにしています。
 
-**Layout asks the window, not the device.** Split View and Stage Manager hand an
-iPad app an arbitrary width, so `if iPad` would put two 300pt columns on screen
-the moment a student opens something alongside. Every adaptive decision is a
-width threshold.
+**レイアウトは端末ではなく「窓の幅」で決めます。** Split View も Stage Manager も任意の幅を渡してくるので、「iPad なら」と書くと、生徒が横に別アプリを開いた瞬間に300ptの列が2本並びます。判断はすべて幅のしきい値です。
 
-## Layout
+## 構成
 
 ```
-WakaRouteKit/          Swift package — all logic, testable without a simulator
-  Config/              Environment, client identity, version gate
-  Networking/          HTTP transport, RFC 7807 problem details
-  Security/            Keychain-backed secret storage
-  Storage/             File paths — see FilePath.swift, it exists for a reason
-  Auth/                Device registration, token lifecycle, account handover
-  Content/             Paths, courses, lessons, quizzes, offline replay, home digest
-  StudyTime/           Study timer, calendar, server sync
-  UnderstandingMap/    Prerequisite graph, mastery derivation, 今集中すること
-  Profile/             Learner profile, 志望校
-  Schools/             School catalogue
-  Resources/           The prerequisite graph and the legal documents, as data
+WakaRouteKit/          Swiftパッケージ — ロジックはすべてここ。シミュレータ不要でテストできる
+  Config/              環境、クライアント識別、バージョンゲート
+  Networking/          HTTP、RFC 7807 のエラー
+  Security/            キーチェーンによる機密保存
+  Storage/             ファイルパス（FilePath.swift には理由があります）
+  Auth/                端末登録、トークン更新、記録の引き継ぎ
+  Content/             パス・コース・レッスン・クイズ、オフライン再送、ホーム集計
+  StudyTime/           学習タイマー、カレンダー、サーバー同期
+  UnderstandingMap/    前提関係グラフ、理解度の導出、今集中すること
+  Profile/             学習者プロフィール、志望校
+  Schools/             高校カタログ
+  Resources/           前提関係グラフと法的文書（データとして同梱）
 
-WakaRoute/             App target — SwiftUI screens only
-  DesignSystem/        Shared layout and presentation
-  Features/            One folder per area
-  Navigation/          Routes, and the context pushed screens need
+WakaRoute/             アプリターゲット — SwiftUIの画面のみ
+  DesignSystem/        共通のレイアウトと表示
+  Features/            機能ごとのフォルダ
+  Navigation/          画面遷移と、遷移先が必要とする情報
 ```
 
-Logic lives in the package so `swift test` runs from the command line without
-booting a simulator.
+ロジックをパッケージ側に置いているので、`swift test` はシミュレータを起動せずコマンドラインで走ります。
 
-## Building
+## ビルドと検証
 
-Requires Xcode 26 or later.
+Xcode 26 以降が必要です。
 
 ```bash
 cd WakaRouteKit && swift test
@@ -98,42 +80,44 @@ xcodebuild -project WakaRoute.xcodeproj -scheme WakaRoute \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' build
 ```
 
-Debug builds accept launch arguments for reaching screens that sit several
-pushes deep. All are compiled out of Release builds.
+Debug ビルドでは、階層の深い画面を直接開く起動引数が使えます。**Release ビルドからは完全に除去されます。**
 
-| Argument | Opens |
+| 引数 | 開く画面 |
 |---|---|
-| `-startTab N` | A tab directly |
-| `-openLesson <id>` | One lesson |
-| `-openLesson <id> -withQuiz` | That lesson with its quiz open |
-| `-openMap` | The 理解マップ against live data |
-| `-openDoc legal-privacy` | One of the bundled documents |
-| `-openFeedback` | The lesson rating control |
-| `-useSampleData` | 理解マップ fixtures, behind a サンプル表示 banner |
+| `-startTab N` | 指定のタブ |
+| `-openLesson <id>` | レッスン1件 |
+| `-openLesson <id> -withQuiz` | クイズを開いた状態のレッスン |
+| `-openMap` | 理解マップ（実データ） |
+| `-openDoc legal-privacy` | 同梱の文書 |
+| `-openFeedback` | レッスン評価 |
+| `-useSampleData` | 理解マップの仮データ（サンプル表示バナー付き） |
 
-## Backends
+## バックエンド
 
-Learning content and accounts come from **MANABU2** (`api.manabu2.com`), which
-is operated by the same company. The school catalogue comes from
-`wakaroute.com`. **No API key is embedded anywhere** — device registration
-exists for that purpose.
+学習内容とアカウントは **MANABU2**（`api.manabu2.com`）から取得します。**同じ会社が運営しています。** 高校情報は `wakaroute.com` から取得します。
 
-## Privacy
+**APIキーは一切埋め込んでいません。** 端末登録がその役割を担っています。
 
-Users are minors, and the app is built accordingly: no analytics, no crash
-reporting, no advertising identifier, no name, address or date of birth. The
-full policy ships inside the app under その他 → プライバシーポリシー and is
-mirrored at [wakaroute.com/privacy](https://wakaroute.com/privacy).
+## プライバシー
 
-The trade is stated in the policy rather than hidden: with no analytics, nobody
-can watch which screens a student uses — and nobody finds out when the app
-crashes, either.
+利用者は未成年です。そのつもりで作っています。アクセス解析なし、クラッシュ収集なし、広告識別子なし、氏名・住所・生年月日も取得しません。
 
-## Contributing
+方針の代償も、隠さずポリシーに書いています — **解析を入れていないので、どの画面が使われているかを運営者は見られません。そのかわり、アプリが落ちたことも分かりません。**
 
-See [AGENTS.md](AGENTS.md) for the conventions this codebase holds to, including
-the backend behaviours that will bite you if you have not met them.
+全文はアプリ内（その他 → プライバシーポリシー）と [wakaroute.com/privacy](https://wakaroute.com/privacy) にあります。
 
-## Licence
+## コントリビューション
 
-All rights reserved. Published for reference; not licensed for reuse.
+[CONTRIBUTING.md](CONTRIBUTING.md) と、[AGENTS.md](AGENTS.md)（このコードベースの決めごと。特に、知らないと必ず踏むバックエンドの挙動）をご覧ください。
+
+## ライセンス
+
+[Apache License 2.0](LICENSE)。[NOTICE](NOTICE) と [TRADEMARKS.md](TRADEMARKS.md) もあわせてご確認ください。
+
+---
+
+**English**: iOS client for WakaRoute, a free open-source study service for
+Japanese middle-school students preparing for high school entrance exams. It
+holds a prerequisite graph over the curriculum and, when a student is stuck,
+points them back to the earliest topic that is genuinely missing rather than the
+one that hurts. Documentation is in Japanese; code comments are in English.

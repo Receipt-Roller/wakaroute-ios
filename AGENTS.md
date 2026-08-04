@@ -1,105 +1,101 @@
 # AGENTS.md — wakaroute-ios
 
-## Project
+このリポジトリを変更する前に読んでください。**やり方ではなく、判断の理由**を書いています。
 
-- AB Project ID: `89e7a1cf-f35e-4e65-a28d-39176ad06d39` (WakaRoute — all client tasks)
-- Backend AB Project ID: `1d20be70-77b3-4016-8254-f92166172c2f` (LMS - DEV / MANABU2)
-- Task prefix for this repo: `[iOS]`
-- Specifications live in the AB Wiki and are authoritative. Where this file and
-  the Wiki disagree, raise an AB Task rather than quietly matching either one.
+## プロジェクト
 
-Required reading before changing anything here:
+- AB プロジェクト: `89e7a1cf-f35e-4e65-a28d-39176ad06d39`（WakaRoute — クライアント側の課題）
+- バックエンド: `1d20be70-77b3-4016-8254-f92166172c2f`（LMS-DEV / MANABU2）
+- このリポジトリの課題プレフィックス: `[iOS]`
+- 仕様は AB Wiki が正です。この文書と食い違う場合、**どちらかに黙って合わせず、AB タスクを起票**してください。
+
+変更前に読むもの:
 
 - `WakaRoute サービス仕様`
 - `WakaRoute iOS・Android開発ガイド`
 - `アカウント作成と引き継ぎの実装ガイド（デバイス登録 / アカウント連携）`
 
-## Layout
+## 構成
 
 ```
-WakaRouteKit/          Swift package — all logic, testable from the CLI
-  Config/              Environment, client identity, version gate
-  Networking/          HTTP transport, RFC 7807 errors
-  Security/            Keychain-backed secret storage
-  Storage/             File paths
-  Auth/                Device registration, token lifecycle, account handover
-  Content/             Paths, courses, lessons, quizzes, offline replay
-  StudyTime/           Study timer, calendar, server sync
-  UnderstandingMap/    Prerequisite graph, mastery derivation
-  Profile/             Learner profile, 志望校
-  Schools/             School catalogue client
-  Resources/           Prerequisite graph and legal documents, as data
+WakaRouteKit/          Swiftパッケージ — ロジックはすべてここ
+  Config/              環境、クライアント識別、バージョンゲート
+  Networking/          HTTP、RFC 7807 のエラー
+  Security/            キーチェーンによる機密保存
+  Storage/             ファイルパス
+  Auth/                端末登録、トークン更新、記録の引き継ぎ
+  Content/             パス・コース・レッスン・クイズ、オフライン再送
+  StudyTime/           学習タイマー、カレンダー、サーバー同期
+  UnderstandingMap/    前提関係グラフ、理解度の導出
+  Profile/             学習者プロフィール、志望校
+  Schools/             高校カタログ
+  Resources/           前提関係グラフと法的文書（データとして同梱）
+
+WakaRoute/             アプリターゲット — 画面のみ
 ```
 
-Logic lives in the package, not the app target, so `swift test` runs without a
-simulator.
+ロジックをパッケージに置くのは、`swift test` がシミュレータなしで走るようにするためです。
 
-## Architecture
+## 設計
 
 ```
-View → ViewModel → UseCase → Repository → API client / cache
+View → ViewModel → UseCase → Repository → APIクライアント / キャッシュ
 ```
 
-- Screens never perform network calls directly.
-- Loading, success, empty, failure and retry are explicit states, not implied
-  by a nil.
-- API response types are not exposed to views; map to screen models.
-- Use `id` as the permanent key. Never key off a school name or a 要素 name.
+- 画面から直接通信しない。
+- 読み込み中・成功・空・失敗・再試行は**明示的な状態**として持つ。nil で暗示しない。
+- API のレスポンス型を画面に渡さない。画面用のモデルに変換する。
+- 鍵には必ず `id` を使う。**学校名や要素名をキーにしない。**
 
-## Backend rules that bite
+## 知らないと必ず踏むバックエンドの挙動
 
-Read these before touching `Auth/`.
+`Auth/` を触る前に読んでください。
 
-- **The refresh token is single-use.** Presenting a rotated token again makes
-  the server revoke every session on the account. All renewal goes through
-  `AuthSession`, which serializes it. Never retry a failed refresh with the
-  same token — recover via `/api/v1/devices/token` instead.
-- **`deviceSecret` is returned exactly once.** Persist it before anything else.
-- **`deviceId` is a label, not a credential.** It must be ≥16 characters.
-- **Quiz submissions need an `Idempotency-Key`.** Without one, a resend after a
-  timeout records a duplicate attempt, and attempts gate certificates.
-- Branch on the error `code`, never on `detail` — the prose changes.
+- **リフレッシュトークンは1回きり。** 使用済みのものを再提示すると、サーバーはそのアカウントの全セッションを失効させます。更新はすべて `AuthSession` を通し、直列化しています。失敗したリフレッシュを**同じトークンで再試行しない**でください。`/api/v1/devices/token` で回復します。
+- **`deviceSecret` は登録時に1回しか返りません。** 何よりも先に保存してください。
+- **`deviceId` は識別子であって資格情報ではありません。** 16文字以上必要です。
+- **クイズ提出には `Idempotency-Key` が要ります。** 無いと、タイムアウト後の再送が2回目の挑戦として記録され、修了証の条件にも影響します。
+- **エラーは `code` で分岐してください。`detail` は文面が変わります。**
+- **`/me` は組織のメンバー一覧を返します**（LMS-DEV t-d1bea74）。クライアントは4項目しか読みません。他人の ID をモデルに入れないでください。
 
-## Security
+## セキュリティとプライバシー
 
-- Never put credentials in `UserDefaults`. Keychain only, with
-  `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`.
-- Never embed an API key. Device registration exists for this purpose.
-- Never log names, emails, tokens, answers, or study history.
-- Users are minors. Collect the minimum the feature actually requires.
-- **Never hand `FileManager` a path from `URL.path()`.** It percent-encodes, so
-  anything under Application Support silently fails to load while writing
-  perfectly. Use `URL.filePath`. This cost the study history, the offline queue
-  and the path cache once already.
-- **This repository is public.** Do not commit real account ids, tokens or
-  captured production responses containing them. Fixtures should be obviously
-  fake.
+- 資格情報を `UserDefaults` に置かない。**キーチェーンのみ**、`kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`。
+- **API キーを埋め込まない。** 端末登録がその役割です。
+- **氏名・メール・トークン・解答・学習履歴をログに出さない。**
+- 利用者は未成年です。機能に本当に必要な情報だけを集めてください。
+- **`FileManager` に `URL.path()` の値を渡さない。** パーセントエンコードされるので、Application Support 配下では**書き込みは成功するのに読み込みだけ静かに失敗**します。`URL.filePath` を使ってください。これで学習履歴・オフラインキュー・パスキャッシュを一度失っています。
+- **このリポジトリは公開です。** 実在するアカウント ID・トークン・本番から取得したレスポンスをコミットしないでください。フィクスチャは明らかに架空の値にしてください。
 
-## Verifying
+## 画面をつくるとき
+
+- **端末で分岐しない。** `if iPad` は Split View と Stage Manager で破綻します。判断は幅のしきい値（`StudyLayout` / `ReadableWidth`）で行ってください。
+- **アクセシビリティサイズで行が列になる**ことを確認してください（`AdaptiveRow`）。アイコンとシェブロンが幅を保つと、日本語が1〜2文字ずつ折り返されます。
+- **色だけで意味を運ばない。** 記号か言葉を必ず添えてください。
+- **始めていない生徒に「戻れ」と言わない。** これは3回踏んでいます。モデル上は正しい状態（blocked、レベル1）に、性質の違う状況が混ざるのが原因です。
+
+## 検証
 
 ```bash
 cd WakaRouteKit && swift test
 ```
 
-## Completing an AB Task
+Release ビルドも通してください。**`#if DEBUG` の範囲を間違えると Debug では気づけません** — 本番の実装を囲んでしまい、Release だけ落ちたことがあります。
 
-Record in a comment: the spec covered, states implemented, APIs and environment
-used, devices tested, test results, VoiceOver check, failure/empty/retry check,
-screenshots, and anything left undone. Close with `ab_complete_task`, then
-re-read to confirm Status: Done, Progress: 100%, Complete: True.
+## AB タスクを完了するとき
 
-## Settled — do not reopen without a task
+コメントに残すもの: 対応した仕様、実装した状態、使った API と環境、確認した端末、テスト結果、VoiceOver の確認、失敗・空・再試行の確認、スクリーンショット、**やり残したこと**。`ab_complete_task` で閉じ、Status: Done / Progress: 100% / Complete: True を読み直して確認してください。
 
-- Minimum iOS **17.0**, bundle id `com.wakaroute.app`, iPhone + iPad.
-- No analytics and no crash reporting. This is written into the privacy policy;
-  adopting either means changing a published document.
-- 要素 are MANABU2 **course ids**. Names are never keys.
-- Mastery levels 3–5 need 確認テスト and are not claimed until they exist.
+## 決まっていること — 勝手に蒸し返さない
 
-## Unresolved — do not decide alone
+- 最低対応 **iOS 17.0**、bundle id `com.wakaroute.app`、iPhone + iPad。
+- **アクセス解析とクラッシュ収集は入れない。** これはプライバシーポリシーに明記済みで、入れるなら公開文書の変更を伴います。
+- 要素は MANABU2 の**コース ID**。名前は鍵にしません。
+- 理解度レベル3以上は確認テストが必要で、**存在するまで主張しません**。
 
-- Prerequisite edges for 国語 / 英語 / 理科 / 社会 (数学 is drafted and in review).
-- Whether unused accounts are deleted automatically or by the annual manual
-  sweep the privacy policy promises.
+## 決まっていないこと — 一人で決めない
 
-Raise these as `[Shared]` or `[API]` tasks and update the Wiki with the outcome.
+- 国語・英語・理科・社会の前提関係の辺（数学は下書き済み、レビュー中）。
+- 未使用アカウントの削除を自動化するか、プライバシーポリシーで約束した**年1回の手作業**のままにするか。
+
+`[Shared]` または `[API]` のタスクとして起票し、結論を Wiki に反映してください。

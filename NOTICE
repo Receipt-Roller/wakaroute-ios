@@ -1,0 +1,49 @@
+WakaRoute iOS
+Copyright 2026 RECEIPTROLLER Inc.
+
+This product includes data derived from the school-code CSV files published by
+the Ministry of Education, Culture, Sports, Science and Technology of Japan
+(MEXT).
+
+Source:
+https://www.mext.go.jp/b_menu/toukei/mext_01087.html
+
+Source dataset used by the current generated catalog: May 1, 2025 (final
+version).
+
+Attribution and modification notice:
+"MEXT School Codes" (Ministry of Education, Culture, Sports, Science and
+Technology of Japan) has been filtered to high-school codes, normalized,
+assigned stable WakaRoute identifiers, and supplemented by RECEIPTROLLER Inc.
+
+The MEXT website terms conform to the Government Standard Terms of Use
+(Version 2.0) and are compatible with Creative Commons Attribution 4.0
+International. Reusers must preserve the source attribution and clearly state
+when they edit or process the source-derived data. WakaRoute is not endorsed
+by MEXT.
+
+MEXT website terms:
+https://www.mext.go.jp/b_menu/1351168.htm
+
+School profiles, decision guides, admissions, and exam schedules may cite
+official school or education-board pages in per-record `sources` fields.
+WakaRoute-authored summaries and structured annotations are original
+paraphrases and do not copy the cited pages' photographs, logos, or full text.
+Rights in content on cited third-party pages remain with their respective
+owners. A source URL in this repository does not grant permission to reuse the
+source page itself.
+
+The Apache License 2.0 applies to WakaRoute-authored software, schemas,
+documentation, summaries, and annotations, except where a file or item states
+otherwise. It does not replace terms that independently apply to source
+material or third-party content.
+
+Third-party JavaScript and CSS libraries retain their respective licenses. See
+the license files distributed alongside those libraries under wwwroot/lib/.
+
+The GitHub name and mark are trademarks of GitHub, Inc. The mark in the site
+footer is used only to identify and link to this project's GitHub repository.
+
+The high school information shown in this app is retrieved at runtime from
+wakaroute.com and originates from the dataset described above. This client does
+not bundle a copy of it.
