@@ -1,0 +1,15 @@
+.DS_Store
+*.xcuserstate
+xcuserdata/
+DerivedData/
+build/
+.build/
+.swiftpm/
+
+# Never commit environment secrets or signing material.
+*.p12
+*.mobileprovision
+Secrets.xcconfig
+
+# Local tool configuration, not part of the project.
+.claude/
