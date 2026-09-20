@@ -28,6 +28,7 @@ struct LearnSplitView: View {
     let catalog: ContentCatalog
     let content: ContentClient
     let queue: LearningActionQueue?
+    let cards: CardLibrary
 
     @State private var subject: SubjectId?
 
@@ -37,9 +38,19 @@ struct LearnSplitView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            List(catalog.subjects, selection: $subject) { overview in
-                SubjectSidebarRow(overview: overview)
-                    .tag(overview.id)
+            List(selection: $subject) {
+                ForEach(catalog.subjects) { overview in
+                    SubjectSidebarRow(overview: overview)
+                        .tag(overview.id)
+                }
+
+                Section {
+                    NavigationLink {
+                        CardsView(viewModel: CardsViewModel(library: cards))
+                    } label: {
+                        Label("単語カード・漢字カード", systemImage: "rectangle.on.rectangle.angled")
+                    }
+                }
             }
             .frame(width: Self.sidebarWidth)
 

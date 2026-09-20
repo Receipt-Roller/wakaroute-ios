@@ -12,6 +12,14 @@ struct RootView: View {
 
     /// Design review only: `-startTab 記録` opens straight to a tab so a screen
     /// can be inspected without navigating. Compiled out of release builds.
+    private static var opensCards: Bool {
+        #if DEBUG
+        return ProcessInfo.processInfo.arguments.contains("-openCards")
+        #else
+        return false
+        #endif
+    }
+
     private static var initialTab: Int {
         #if DEBUG
         let arguments = ProcessInfo.processInfo.arguments
@@ -35,6 +43,10 @@ struct RootView: View {
                     )
                 )
             }
+        } else if RootView.opensCards {
+            // Cards sit two pushes inside 学ぶ, so design review gets a way
+            // straight to them like the other deep screens.
+            NavigationStack { CardsView(viewModel: CardsViewModel(library: services.cards)) }
         } else if let document = RootView.debugDocument {
             NavigationStack { LegalDocumentView(document: document) }
         } else if RootView.opensFeedback {
@@ -104,11 +116,14 @@ struct RootView: View {
                 .tabItem { Label("ホーム", systemImage: "house") }
                 .tag(0)
 
-            LearnView(viewModel: LearnViewModel(
-                content: services.content,
-                queue: services.actionQueue,
-                structureCache: services.contentStructure
-            ))
+            LearnView(
+                viewModel: LearnViewModel(
+                    content: services.content,
+                    queue: services.actionQueue,
+                    structureCache: services.contentStructure
+                ),
+                cards: services.cards
+            )
                 .tabItem { Label("学ぶ", systemImage: "book") }
                 .tag(1)
 
@@ -155,6 +170,7 @@ struct AppServices {
     let actionQueue: LearningActionQueue
     let contentStructure: ContentStructureCache
     let versionGate: AppVersionGate
+    let cards: CardLibrary
 
     @MainActor
     static func live(environment: AppEnvironment = .production) -> AppServices {
@@ -209,7 +225,24 @@ struct AppServices {
             // Unauthenticated on purpose: whether a build is too old is not a
             // question about the student, and asking it must not depend on
             // registration having succeeded.
-            versionGate: AppVersionGate(http: http, environment: environment)
+            versionGate: AppVersionGate(http: http, environment: environment),
+            // Unauthenticated too: the card sets are public data on
+            // wakaroute.com, the same as 高校検索.
+            cards: Self.cardLibrary(http: http, environment: environment)
+        )
+    }
+
+    /// Card sets are large but public: losing the cache costs one download.
+    /// Progress is not — it exists only here, so it falls back to memory rather
+    /// than failing the whole feature.
+    private static func cardLibrary(http: HTTPClient, environment: AppEnvironment) -> CardLibrary {
+        CardLibrary(
+            client: CardCatalogClient(http: http, environment: environment),
+            wordStore: (try? CardFileStore<WordCard>(filename: "cards-english-words.json"))
+                ?? InMemoryCardStore<WordCard>(),
+            kanjiStore: (try? CardFileStore<KanjiCard>(filename: "cards-kanji.json"))
+                ?? InMemoryCardStore<KanjiCard>(),
+            progressStore: (try? CardProgressFileStore()) ?? InMemoryCardProgressStore()
         )
     }
 

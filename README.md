@@ -92,6 +92,7 @@ Debug ビルドでは、階層の深い画面を直接開く起動引数が使�
 | `-openLesson <id>` | レッスン1件 |
 | `-openLesson <id> -withQuiz` | クイズを開いた状態のレッスン |
 | `-openMap` | 理解マップ（実データ） |
+| `-openCards` | 単語カード・漢字カード |
 | `-openDoc legal-privacy` | 同梱の文書 |
 | `-openFeedback` | レッスン評価 |
 | `-useSampleData` | 理解マップの仮データ（サンプル表示バナー付き） |

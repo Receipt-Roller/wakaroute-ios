@@ -7,6 +7,9 @@ import WakaRouteKit
 /// subject that is still being built says so rather than vanishing.
 struct LearnView: View {
     @State var viewModel: LearnViewModel
+    /// Cards are 教材, so they live with the rest of the material rather than
+    /// taking a sixth tab.
+    let cards: CardLibrary
 
     var body: some View {
         GeometryReader { geometry in
@@ -17,7 +20,7 @@ struct LearnView: View {
             // device.
             if geometry.size.width >= StudyLayout.sideBySide,
                case let .ready(catalog) = viewModel.state {
-                LearnSplitView(catalog: catalog, content: viewModel.content, queue: viewModel.queue)
+                LearnSplitView(catalog: catalog, content: viewModel.content, queue: viewModel.queue, cards: cards)
             } else {
                 stack
             }
@@ -54,6 +57,8 @@ struct LearnView: View {
                             Text("教科をひらくと、領域ごとの学習内容が見られます。")
                         }
 
+                        cardsSection
+
                         if !catalog.unclassified.isEmpty {
                             unclassifiedSection(catalog.unclassified)
                         }
@@ -63,6 +68,26 @@ struct LearnView: View {
             .readableWidth()
             .navigationTitle("学ぶ")
             .refreshable { await viewModel.load() }
+        }
+    }
+
+    private var cardsSection: some View {
+        Section {
+            NavigationLink {
+                CardsView(viewModel: CardsViewModel(library: cards))
+            } label: {
+                Label {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text("単語カード・漢字カード").font(.body.weight(.medium))
+                        Text("電波がなくても使えます")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "rectangle.on.rectangle.angled").foregroundStyle(.tint)
+                }
+            }
+            .accessibilityElement(children: .combine)
         }
     }
 
