@@ -23,6 +23,15 @@ extension WordCard: StudyCard {
     public var isStudiable: Bool { !meaningsJa.isEmpty }
 }
 
+extension SubjectCard: StudyCard {
+    /// These carry no frequency ranking, so the published order decides.
+    public var frequencyRank: Int? { nil }
+    public var sequence: Int? { order }
+    public var studyStage: String? { nil }
+
+    public var isStudiable: Bool { !prompt.isEmpty && !answer.isEmpty }
+}
+
 extension KanjiCard: StudyCard {
     public var studyStage: String? { officialStage }
 

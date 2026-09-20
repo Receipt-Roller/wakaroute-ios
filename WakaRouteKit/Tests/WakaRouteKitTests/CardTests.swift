@@ -300,6 +300,7 @@ struct CardLibraryTests {
             ),
             wordStore: InMemoryCardStore<WordCard>(),
             kanjiStore: InMemoryCardStore<KanjiCard>(),
+            subjectStore: InMemoryCardStore<SubjectCard>(),
             progressStore: InMemoryCardProgressStore()
         )
     }
@@ -329,6 +330,7 @@ struct CardLibraryTests {
             ),
             wordStore: store,
             kanjiStore: InMemoryCardStore<KanjiCard>(),
+            subjectStore: InMemoryCardStore<SubjectCard>(),
             progressStore: InMemoryCardProgressStore()
         )
 
@@ -341,5 +343,104 @@ struct CardLibraryTests {
     func firstRunWithNoNetworkFails() async {
         let library = self.library(status: 500, body: "")
         await #expect(throws: (any Error).self) { try await library.words() }
+    }
+}
+
+/// Captured verbatim from https://wakaroute.com/api/v1/study-cards on
+/// 2026-09-20.
+private let subjectPayload = """
+{
+  "datasetVersion": "2026.2",
+  "asOf": "2026-09-20",
+  "license": { "name": "WakaRoute original study cards", "spdxId": "Apache-2.0",
+               "url": "https://www.apache.org/licenses/LICENSE-2.0",
+               "attribution": "Copyright Receipt Roller, Inc." },
+  "items": [
+    { "id": "math-numbers-absolute-value", "subject": "math", "domain": "numbers",
+      "recommendedGrade": 1, "cardType": "term",
+      "prompt": "絶対値とは何？", "answer": "数直線上で0からその数までの距離。",
+      "explanation": "距離なので絶対値は0以上になる。", "tags": ["正負の数"], "sourceRefs": ["mext"] },
+    { "id": "science-energy-work", "subject": "science", "domain": "energy",
+      "recommendedGrade": 3, "cardType": "formula-unit",
+      "prompt": "仕事の公式は？", "answer": "力×距離", "explanation": "単位はJ。",
+      "tags": ["仕事"], "sourceRefs": ["mext"] },
+    { "id": "social-studies-history-century", "subject": "social-studies", "domain": "history",
+      "recommendedGrade": 1, "cardType": "chronology",
+      "prompt": "西暦645年は何世紀？", "answer": "7世紀",
+      "explanation": "年を100で割って切り上げる。", "tags": ["年代"], "sourceRefs": ["mext"] }
+  ]
+}
+"""
+
+@Suite("Subject cards")
+struct SubjectCardTests {
+
+    private func load() async throws -> [SubjectCard] {
+        let client = CardCatalogClient(
+            http: StubHTTP(status: 200, body: Data(subjectPayload.utf8), headers: ["ETag": "\"study-cards-2026.2\""]),
+            environment: AppEnvironment.production
+        )
+        guard case let .updated(catalog) = try await client.subjectCards(knownEntityTag: nil) else { return [] }
+        return catalog.cards
+    }
+
+    @Test("The 数学・理科・社会 set decodes with its own licence")
+    func decodes() async throws {
+        let client = CardCatalogClient(
+            http: StubHTTP(status: 200, body: Data(subjectPayload.utf8), headers: [:]),
+            environment: AppEnvironment.production
+        )
+        guard case let .updated(catalog) = try await client.subjectCards(knownEntityTag: nil) else {
+            Issue.record("expected a catalogue"); return
+        }
+
+        #expect(catalog.cards.count == 3)
+        #expect(catalog.datasetVersion == "2026.2")
+        // Written by WakaRoute, so Apache-2.0 rather than the CC BY-SA of the
+        // word and kanji data. Still has to be shown.
+        #expect(catalog.licenses.first?.spdxId == "Apache-2.0")
+    }
+
+    @Test("Published order is kept, because these carry no frequency ranking")
+    func keepsPublishedOrder() async throws {
+        let cards = try await load()
+        #expect(cards.map(\.order) == [0, 1, 2])
+        #expect(CardDeck.inScope(cards, scope: .init()).map(\.id) == cards.map(\.id))
+    }
+
+    @Test("A card with no answer is left out")
+    func excludesAnswerless() throws {
+        let blank = try JSONDecoder().decode(SubjectCard.self, from: Data("""
+        { "id": "x", "subject": "math", "domain": "numbers", "recommendedGrade": 1,
+          "cardType": "term", "prompt": "問い", "answer": "", "tags": [] }
+        """.utf8))
+        #expect(!blank.isStudiable)
+        #expect(CardDeck.inScope([blank], scope: .init()).isEmpty)
+    }
+
+    @Test("A year filter works the same as it does for words")
+    func filtersByGrade() async throws {
+        let cards = try await load()
+        #expect(CardDeck.inScope(cards, scope: .init(grade: 3)).map(\.id) == ["science-energy-work"])
+    }
+
+    @Test("A stored card round-trips, order included")
+    func roundTrips() async throws {
+        let cards = try await load()
+        // Through the file store, not the in-memory one: the point is whether
+        // the order survives being encoded, and an in-memory store never
+        // encodes anything.
+        let store = try CardFileStore<SubjectCard>(filename: "test-subject-\(UUID().uuidString).json")
+        try store.save(CardCatalog(
+            datasetVersion: "2026.2", asOf: "2026-09-20", licenses: [],
+            cards: cards, entityTag: "\"study-cards-2026.2\"", fetchedAt: Date()
+        ))
+
+        let reloaded = try #require(try store.load())
+        #expect(reloaded.cards.map(\.id) == cards.map(\.id))
+        // The order is not in the payload, so it has to be written down. Lose
+        // it and the deck silently re-sorts by id on the next launch.
+        #expect(reloaded.cards.map(\.order) == [0, 1, 2])
+        #expect(CardDeck.inScope(reloaded.cards, scope: .init()).map(\.id) == cards.map(\.id))
     }
 }

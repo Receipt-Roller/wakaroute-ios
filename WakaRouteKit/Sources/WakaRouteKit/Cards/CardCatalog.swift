@@ -127,3 +127,70 @@ struct KanjiDatasetResponse: Decodable {
     let license: CardLicense?
     let items: [KanjiCard]?
 }
+
+/// 数学・理科・社会 の一問一答カード.
+///
+/// Unlike the word and kanji sets these are WakaRoute's own writing, and each
+/// card names the 教科 and 領域 it belongs to — the same 領域 as the MANABU2
+/// paths.
+public struct SubjectCard: Codable, Sendable, Equatable, Identifiable {
+    public let id: String
+    /// `math`, `science`, `social-studies`.
+    public let subject: String
+    /// `numbers`, `geometry`, … — matches the 領域 of the learning paths.
+    public let domain: String
+    public let recommendedGrade: Int?
+    /// `term`, `reasoning`, `formula-unit`, `pitfall`, …
+    public let cardType: String?
+    public let prompt: String
+    public let answer: String
+    public let explanation: String?
+    public let tags: [String]
+    /// Position in the published set. The order groups by 教科 and 領域, which
+    /// is the order worth studying in — these carry no frequency ranking.
+    public var order: Int
+
+    private enum CodingKeys: String, CodingKey {
+        case id, subject, domain, recommendedGrade, cardType
+        case prompt, answer, explanation, tags
+        // Not in the API payload, but written to the device: without it a
+        // reloaded set falls back to sorting by id, quietly changing the order
+        // the cards are studied in after a restart.
+        case order
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        subject = try c.decodeIfPresent(String.self, forKey: .subject) ?? ""
+        domain = try c.decodeIfPresent(String.self, forKey: .domain) ?? ""
+        recommendedGrade = try c.decodeIfPresent(FlexibleInt.self, forKey: .recommendedGrade)?.value
+        cardType = try c.decodeIfPresent(String.self, forKey: .cardType)
+        prompt = try c.decodeIfPresent(String.self, forKey: .prompt) ?? ""
+        answer = try c.decodeIfPresent(String.self, forKey: .answer) ?? ""
+        explanation = try c.decodeIfPresent(String.self, forKey: .explanation)
+        tags = try c.decodeIfPresent([String].self, forKey: .tags) ?? []
+        order = try c.decodeIfPresent(Int.self, forKey: .order) ?? 0
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(subject, forKey: .subject)
+        try c.encode(domain, forKey: .domain)
+        try c.encodeIfPresent(recommendedGrade, forKey: .recommendedGrade)
+        try c.encodeIfPresent(cardType, forKey: .cardType)
+        try c.encode(prompt, forKey: .prompt)
+        try c.encode(answer, forKey: .answer)
+        try c.encodeIfPresent(explanation, forKey: .explanation)
+        try c.encode(tags, forKey: .tags)
+        try c.encode(order, forKey: .order)
+    }
+}
+
+struct SubjectDatasetResponse: Decodable {
+    let datasetVersion: String?
+    let asOf: String?
+    let license: CardLicense?
+    let items: [SubjectCard]?
+}

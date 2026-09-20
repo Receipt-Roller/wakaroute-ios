@@ -242,6 +242,8 @@ struct AppServices {
                 ?? InMemoryCardStore<WordCard>(),
             kanjiStore: (try? CardFileStore<KanjiCard>(filename: "cards-kanji.json"))
                 ?? InMemoryCardStore<KanjiCard>(),
+            subjectStore: (try? CardFileStore<SubjectCard>(filename: "cards-subjects.json"))
+                ?? InMemoryCardStore<SubjectCard>(),
             progressStore: (try? CardProgressFileStore()) ?? InMemoryCardProgressStore()
         )
     }

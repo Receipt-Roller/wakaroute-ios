@@ -44,17 +44,20 @@ public struct CardLibrary: Sendable {
     private let client: CardCatalogClient
     private let wordStore: any CardStoring<WordCard>
     private let kanjiStore: any CardStoring<KanjiCard>
+    private let subjectStore: any CardStoring<SubjectCard>
     private let progressStore: any CardProgressStoring
 
     public init(
         client: CardCatalogClient,
         wordStore: any CardStoring<WordCard>,
         kanjiStore: any CardStoring<KanjiCard>,
+        subjectStore: any CardStoring<SubjectCard>,
         progressStore: any CardProgressStoring
     ) {
         self.client = client
         self.wordStore = wordStore
         self.kanjiStore = kanjiStore
+        self.subjectStore = subjectStore
         self.progressStore = progressStore
     }
 
@@ -71,6 +74,14 @@ public struct CardLibrary: Sendable {
             stored: try? kanjiStore.load(),
             fetch: { try await client.kanji(knownEntityTag: $0) },
             save: { try? kanjiStore.save($0) }
+        )
+    }
+
+    public func subjectCards() async throws -> CardCatalog<SubjectCard> {
+        try await refreshed(
+            stored: try? subjectStore.load(),
+            fetch: { try await client.subjectCards(knownEntityTag: $0) },
+            save: { try? subjectStore.save($0) }
         )
     }
 

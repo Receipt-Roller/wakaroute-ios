@@ -57,6 +57,25 @@ public struct CardCatalogClient: Sendable {
         }
     }
 
+    public func subjectCards(knownEntityTag: String?) async throws -> CardRefresh<SubjectCard> {
+        try await refresh(path: "/api/v1/study-cards/dataset", knownEntityTag: knownEntityTag) { data, tag in
+            let decoded = try JSONDecoder().decode(SubjectDatasetResponse.self, from: data)
+            let ordered = (decoded.items ?? []).enumerated().map { offset, card -> SubjectCard in
+                var card = card
+                card.order = offset
+                return card
+            }
+            return CardCatalog(
+                datasetVersion: decoded.datasetVersion ?? "",
+                asOf: decoded.asOf ?? "",
+                licenses: [decoded.license].compactMap { $0 },
+                cards: ordered,
+                entityTag: tag,
+                fetchedAt: now()
+            )
+        }
+    }
+
     private func refresh<Card>(
         path: String,
         knownEntityTag: String?,

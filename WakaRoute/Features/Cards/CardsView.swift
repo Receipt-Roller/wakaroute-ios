@@ -42,9 +42,25 @@ struct CardsView: View {
                 .pickerStyle(.segmented)
             }
 
+            // 五教科ぶん。国語は漢字、英語は単語、残る3教科は一問一答で、
+            // 並びはアプリのほかの画面と同じ 国語・数学・英語・理科・社会。
             Section {
                 DeckRow(
+                    title: "漢字カード",
+                    subtitle: "国語",
+                    symbol: "character.textbox",
+                    total: viewModel.scopedCount(in: viewModel.kanji),
+                    started: viewModel.startedCount(in: viewModel.kanji),
+                    learned: viewModel.learnedCount(in: viewModel.kanji)
+                ) {
+                    KanjiStudyView(viewModel: viewModel)
+                }
+
+                subjectDeck("数学カード", subject: CardSubjects.math, symbol: "x.squareroot")
+
+                DeckRow(
                     title: "単語カード",
+                    subtitle: "英語",
                     symbol: "textformat.alt",
                     total: viewModel.scopedCount(in: viewModel.words),
                     started: viewModel.startedCount(in: viewModel.words),
@@ -53,22 +69,15 @@ struct CardsView: View {
                     WordStudyView(viewModel: viewModel)
                 }
 
-                DeckRow(
-                    title: "漢字カード",
-                    symbol: "character.textbox",
-                    total: viewModel.scopedCount(in: viewModel.kanji),
-                    started: viewModel.startedCount(in: viewModel.kanji),
-                    learned: viewModel.learnedCount(in: viewModel.kanji)
-                ) {
-                    KanjiStudyView(viewModel: viewModel)
-                }
+                subjectDeck("理科カード", subject: CardSubjects.science, symbol: "atom")
+                subjectDeck("社会カード", subject: CardSubjects.socialStudies, symbol: "globe.asia.australia")
             } footer: {
                 Text("1回で \(CardDeck.sessionSize) 枚まで出します。5回続けてわかると「おぼえた」になり、出なくなります。")
             }
 
             Section {
                 NavigationLink {
-                    CardLicenseView(licenses: viewModel.licenses, asOf: viewModel.asOf)
+                    CardLicenseView(datasets: viewModel.datasets)
                 } label: {
                     Label("データの出典とライセンス", systemImage: "doc.text")
                 }
@@ -80,10 +89,25 @@ struct CardsView: View {
         }
         .readableWidth()
     }
+
+    private func subjectDeck(_ title: String, subject: String, symbol: String) -> some View {
+        let cards = viewModel.cards(forSubject: subject)
+        return DeckRow(
+            title: title,
+            subtitle: nil,
+            symbol: symbol,
+            total: viewModel.scopedCount(in: cards),
+            started: viewModel.startedCount(in: cards),
+            learned: viewModel.learnedCount(in: cards)
+        ) {
+            SubjectCardStudyView(title: title, subject: subject, viewModel: viewModel)
+        }
+    }
 }
 
 private struct DeckRow<Destination: View>: View {
     let title: String
+    let subtitle: String?
     let symbol: String
     let total: Int
     let started: Int
@@ -108,7 +132,14 @@ private struct DeckRow<Destination: View>: View {
 
     private var counts: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.body.weight(.medium))
+            HStack(spacing: 6) {
+                Text(title).font(.body.weight(.medium))
+                if let subtitle {
+                    Text(subtitle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
             // Both numbers, because 「わかった」 moves one and 「おぼえた」 the
             // other. Showing only the second makes a working deck look stuck.
             Text("\(total) 枚")
@@ -126,26 +157,33 @@ private struct DeckRow<Destination: View>: View {
 /// 出典とライセンス。CC BY-SA なので、データを見せる画面から辿れる必要が
 /// あります。文面は API が返すものをそのまま出しています。
 struct CardLicenseView: View {
-    let licenses: [CardLicense]
-    let asOf: String
+    let datasets: [CardDataSource]
 
     var body: some View {
         List {
-            if !asOf.isEmpty {
-                Section { Text("データ基準日 \(asOf)").foregroundStyle(.secondary) }
-            }
-
-            ForEach(Array(licenses.enumerated()), id: \.offset) { _, license in
-                Section(license.name ?? "データ") {
-                    if let attribution = license.attribution {
-                        Text(attribution).font(.callout)
+            // Grouped by set rather than by licence: each 基準日 belongs to one
+            // download, and a reader needs to see which data each licence
+            // covers.
+            ForEach(datasets) { dataset in
+                Section {
+                    ForEach(Array(dataset.licenses.enumerated()), id: \.offset) { _, license in
+                        VStack(alignment: .leading, spacing: 6) {
+                            if let attribution = license.attribution {
+                                Text(attribution).font(.callout)
+                            }
+                            if let spdx = license.spdxId {
+                                LabeledContent("ライセンス", value: spdx).font(.footnote)
+                            }
+                            if let url = license.url, let link = URL(string: url) {
+                                Link(url, destination: link).font(.footnote)
+                            }
+                        }
+                        .padding(.vertical, 2)
                     }
-                    if let spdx = license.spdxId {
-                        LabeledContent("ライセンス", value: spdx)
-                    }
-                    if let url = license.url, let link = URL(string: url) {
-                        Link(url, destination: link).font(.footnote)
-                    }
+                } header: {
+                    Text(dataset.title)
+                } footer: {
+                    if !dataset.asOf.isEmpty { Text("データ基準日 \(dataset.asOf)") }
                 }
             }
         }
