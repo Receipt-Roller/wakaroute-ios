@@ -60,6 +60,10 @@ final class CardsViewModel {
         CardDeck.inScope(cards, scope: scope).count { progress[$0.id]?.isLearned == true }
     }
 
+    func startedCount<Card: StudyCard>(in cards: [Card]) -> Int {
+        CardDeck.inScope(cards, scope: scope).count { progress[$0.id] != nil }
+    }
+
     func scopedCount<Card: StudyCard>(in cards: [Card]) -> Int {
         CardDeck.inScope(cards, scope: scope).count
     }

@@ -3,7 +3,7 @@ import WakaRouteKit
 
 /// One sitting with a deck.
 ///
-/// The card turns over on a tap; 「おぼえた」 and 「まだ」 are only offered once
+/// The card turns over on a tap; 「わかった」 and 「まだ」 are only offered once
 /// the back has been seen, because grading a card you have not read is not an
 /// answer.
 struct CardStudyView<Card: StudyCard, Front: View, Back: View>: View {
@@ -17,6 +17,7 @@ struct CardStudyView<Card: StudyCard, Front: View, Back: View>: View {
     @State private var isShowingBack = false
     @State private var answered = 0
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         Group {
@@ -38,44 +39,62 @@ struct CardStudyView<Card: StudyCard, Front: View, Back: View>: View {
 
     private func card(_ card: Card) -> some View {
         VStack(spacing: 20) {
-            Text("\(index + 1) / \(cards.count)")
-                .font(.footnote)
-                .foregroundStyle(.secondary)
-                .accessibilityLabel("\(cards.count) 枚中 \(index + 1) 枚目")
+            ScrollView {
+                VStack(spacing: 20) {
+                    Text("\(index + 1) / \(cards.count)")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel("\(cards.count) 枚中 \(index + 1) 枚目")
 
-            Button {
-                reveal()
-            } label: {
-                VStack(spacing: 18) {
-                    front(card)
+                    Button {
+                        reveal()
+                    } label: {
+                        VStack(spacing: 18) {
+                            front(card)
 
-                    if isShowingBack {
-                        Divider()
-                        back(card)
-                    } else {
-                        Text("タップして答えを見る")
-                            .font(.footnote)
-                            .foregroundStyle(.secondary)
+                            if isShowingBack {
+                                Divider()
+                                back(card)
+                            } else {
+                                Text("タップして答えを見る")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        // Without this the meaning truncates at the larger text
+                        // sizes, leaving a card with no answer on it.
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: .infinity)
+                        .padding(24)
+                        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
                     }
+                    .buttonStyle(.plain)
+                    .accessibilityHint(isShowingBack ? "" : "ひらいて答えを見る")
                 }
-                .frame(maxWidth: .infinity)
-                .padding(24)
-                .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
+                .padding(20)
+                .readableWidth()
             }
-            .buttonStyle(.plain)
-            .accessibilityHint(isShowingBack ? "" : "ひらいて答えを見る")
-
-            Spacer(minLength: 0)
 
             if isShowingBack {
-                HStack(spacing: 12) {
-                    answerButton("まだ", symbol: "arrow.counterclockwise", correct: false, card: card)
-                    answerButton("おぼえた", symbol: "checkmark", correct: true, card: card)
-                }
+                answers(for: card)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
+                    .readableWidth()
             }
         }
-        .padding(20)
-        .readableWidth()
+    }
+
+    /// Side by side normally; stacked once the text is large enough that two
+    /// buttons in a row would wrap a character at a time.
+    private func answers(for card: Card) -> some View {
+        let layout = dynamicTypeSize.isAccessibilitySize
+            ? AnyLayout(VStackLayout(spacing: 12))
+            : AnyLayout(HStackLayout(spacing: 12))
+
+        return layout {
+            answerButton("まだ", symbol: "arrow.counterclockwise", correct: false, card: card)
+            answerButton("わかった", symbol: "checkmark", correct: true, card: card)
+        }
     }
 
     private func answerButton(_ label: String, symbol: String, correct: Bool, card: Card) -> some View {
@@ -97,7 +116,7 @@ struct CardStudyView<Card: StudyCard, Front: View, Back: View>: View {
         ContentUnavailableView {
             Label("おつかれさま", systemImage: "checkmark.circle.fill")
         } description: {
-            Text("\(answered) 枚やりました。おぼえたカードは、間をあけてもう一度出ます。")
+            Text("\(answered) 枚やりました。わかったカードも、間をあけてもう一度出ます。\n5回続けてわかると「おぼえた」になります。")
         }
     }
 

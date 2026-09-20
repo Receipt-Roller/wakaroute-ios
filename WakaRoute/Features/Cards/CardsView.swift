@@ -47,6 +47,7 @@ struct CardsView: View {
                     title: "単語カード",
                     symbol: "textformat.alt",
                     total: viewModel.scopedCount(in: viewModel.words),
+                    started: viewModel.startedCount(in: viewModel.words),
                     learned: viewModel.learnedCount(in: viewModel.words)
                 ) {
                     WordStudyView(viewModel: viewModel)
@@ -56,12 +57,13 @@ struct CardsView: View {
                     title: "漢字カード",
                     symbol: "character.textbox",
                     total: viewModel.scopedCount(in: viewModel.kanji),
+                    started: viewModel.startedCount(in: viewModel.kanji),
                     learned: viewModel.learnedCount(in: viewModel.kanji)
                 ) {
                     KanjiStudyView(viewModel: viewModel)
                 }
             } footer: {
-                Text("1回で \(CardDeck.sessionSize) 枚まで出します。覚えたカードは間をあけて、もう一度出ます。")
+                Text("1回で \(CardDeck.sessionSize) 枚まで出します。5回続けてわかると「おぼえた」になり、出なくなります。")
             }
 
             Section {
@@ -84,29 +86,40 @@ private struct DeckRow<Destination: View>: View {
     let title: String
     let symbol: String
     let total: Int
+    let started: Int
     let learned: Int
     @ViewBuilder let destination: () -> Destination
 
     var body: some View {
         NavigationLink(destination: destination) {
-            HStack(spacing: 14) {
+            AdaptiveRow(alignment: .top) {
                 Image(systemName: symbol)
                     .font(.title3)
                     .foregroundStyle(.tint)
                     .frame(width: 28)
                     .accessibilityHidden(true)
-
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.body.weight(.medium))
-                    Text("\(total) 枚中 \(learned) 枚おぼえました")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                counts
                 Spacer(minLength: 0)
             }
             .padding(.vertical, 2)
             .accessibilityElement(children: .combine)
         }
+    }
+
+    private var counts: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.body.weight(.medium))
+            // Both numbers, because 「わかった」 moves one and 「おぼえた」 the
+            // other. Showing only the second makes a working deck look stuck.
+            Text("\(total) 枚")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            Text("学習中 \(started) 枚・おぼえた \(learned) 枚")
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
