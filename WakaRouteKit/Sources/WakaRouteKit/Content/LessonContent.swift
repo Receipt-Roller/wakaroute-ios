@@ -60,6 +60,10 @@ public indirect enum LessonBlock: Sendable, Equatable, Identifiable {
     /// `<details>` — an exercise answer the student reveals deliberately.
     /// Rendering this expanded would hand them the answer before they try.
     case disclosure(summary: String, blocks: [LessonBlock])
+    /// A diagram. Lesson figures are inline SVG, which this app does not draw,
+    /// so it shows the author's own `<title>` and `<desc>` — the same words the
+    /// web hands to a screen reader. Every published figure carries both.
+    case figure(title: String, description: String)
 
     public var id: String {
         switch self {
@@ -72,7 +76,7 @@ public indirect enum LessonBlock: Sendable, Equatable, Identifiable {
         case let .table(headers, rows): "tbl:\(headers.first?.plain ?? "")\(rows.count)"
         case .divider: "hr:\(UUID().uuidString)"
         case let .disclosure(summary, _): "det:\(summary)"
-
+        case let .figure(title, description): "fig:\(title)\(description.prefix(20))"
         }
     }
 }
@@ -111,8 +115,15 @@ public enum LessonContentParser {
                     result.append(.heading(level: level, text: inline(children)))
 
                 case "p":
-                    let text = inline(children)
+                    // A figure is a block even where the markup nests it inside
+                    // a sentence, so it is lifted out rather than flattened.
+                    let (prose, figures) = separatingFigures(children)
+                    let text = inline(prose)
                     if !text.isEmpty { result.append(.paragraph(text)) }
+                    result += figures
+
+                case "svg":
+                    if let figure = figure(from: children) { result.append(figure) }
 
                 case "ul":
                     let items = listItems(children)
@@ -160,6 +171,49 @@ public enum LessonContentParser {
         }
 
         return result
+    }
+
+    /// A figure's `<title>` and `<desc>`, and nothing else.
+    ///
+    /// The `<text>` elements inside are labels placed on the drawing — 「1組ずつ」,
+    /// 「x」, 「6」. Read out in document order they are not a sentence, they are
+    /// debris, which is what they used to become.
+    private static func figure(from nodes: [HTMLNode]) -> LessonBlock? {
+        func firstText(of name: String, in nodes: [HTMLNode]) -> String? {
+            for node in nodes {
+                guard case let .element(elementName, children) = node else { continue }
+                if elementName == name { return inline(children).plain }
+                if let found = firstText(of: name, in: children) { return found }
+            }
+            return nil
+        }
+
+        let title = firstText(of: "title", in: nodes) ?? ""
+        let description = firstText(of: "desc", in: nodes) ?? ""
+        guard !title.isEmpty || !description.isEmpty else { return nil }
+        return .figure(title: title, description: description)
+    }
+
+    /// Splits figures out of a run of inline markup, at any depth.
+    private static func separatingFigures(_ nodes: [HTMLNode]) -> ([HTMLNode], [LessonBlock]) {
+        var prose: [HTMLNode] = []
+        var figures: [LessonBlock] = []
+
+        for node in nodes {
+            guard case let .element(name, children) = node else {
+                prose.append(node)
+                continue
+            }
+            if name == "svg" {
+                if let found = figure(from: children) { figures.append(found) }
+                continue
+            }
+            let (innerProse, innerFigures) = separatingFigures(children)
+            prose.append(.element(name: name, children: innerProse))
+            figures += innerFigures
+        }
+
+        return (prose, figures)
     }
 
     private static func listItems(_ nodes: [HTMLNode]) -> [InlineText] {
@@ -242,6 +296,10 @@ public enum LessonContentParser {
                     runs += inline(children, bold: bold, italic: italic, code: true).runs
                 case "br":
                     runs.append(InlineRun(text: "\n"))
+                case "svg":
+                    // A figure is never part of a sentence. Wherever one turns
+                    // up in inline markup it is lifted out as its own block.
+                    break
                 default:
                     runs += inline(children, bold: bold, italic: italic, code: code).runs
                 }

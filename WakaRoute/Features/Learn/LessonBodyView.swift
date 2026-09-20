@@ -59,6 +59,9 @@ private struct BlockView: View {
 
         case let .disclosure(summary, inner):
             DisclosureBlockView(summary: summary, blocks: inner)
+
+        case let .figure(title, description):
+            FigureView(title: title, description: description)
         }
     }
 }
@@ -259,6 +262,46 @@ private struct LessonTableView: View {
         }
         .padding(.vertical, 7)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// A diagram the app does not draw.
+///
+/// Lesson figures are inline SVG. Rather than flatten the labels positioned on
+/// the drawing into a line — which reads as nonsense — this shows the author's
+/// own description, written for exactly this purpose and used by the web for
+/// the same reason.
+private struct FigureView: View {
+    let title: String
+    let description: String
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            Image(systemName: "photo")
+                .font(.subheadline)
+                .foregroundStyle(.tint)
+                .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 6) {
+                if !title.isEmpty {
+                    Text(title)
+                        .font(.subheadline.weight(.semibold))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                if !description.isEmpty {
+                    Text(description)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("図: \(title)。\(description)")
     }
 }
 

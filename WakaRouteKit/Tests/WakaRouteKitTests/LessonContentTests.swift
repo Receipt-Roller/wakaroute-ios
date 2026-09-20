@@ -64,6 +64,7 @@ struct LessonContentTests {
             case .table: "table"
             case .divider: "hr"
             case .disclosure: "details"
+            case .figure: "figure"
             }
         }
 
