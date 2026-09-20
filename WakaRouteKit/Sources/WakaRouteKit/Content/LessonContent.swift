@@ -6,12 +6,22 @@ public struct InlineRun: Sendable, Equatable {
     public let isBold: Bool
     public let isItalic: Bool
     public let isCode: Bool
+    /// Set when this run is a formula rather than prose. `text` still holds it
+    /// written on one line, so anything that only wants characters keeps working.
+    public let math: [MathNode]?
 
-    public init(text: String, isBold: Bool = false, isItalic: Bool = false, isCode: Bool = false) {
+    public init(
+        text: String,
+        isBold: Bool = false,
+        isItalic: Bool = false,
+        isCode: Bool = false,
+        math: [MathNode]? = nil
+    ) {
         self.text = text
         self.isBold = isBold
         self.isItalic = isItalic
         self.isCode = isCode
+        self.math = math
     }
 }
 
@@ -24,6 +34,14 @@ public struct InlineText: Sendable, Equatable {
 
     public var plain: String { runs.map(\.text).joined() }
     public var isEmpty: Bool { plain.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    public var hasMath: Bool { runs.contains { $0.math != nil } }
+
+    /// The sentence as VoiceOver should hear it, with formulas read aloud
+    /// rather than spelled out left to right.
+    public var spoken: String {
+        runs.map { $0.math?.spoken ?? $0.text }.joined()
+    }
 }
 
 /// One block of lesson content.
@@ -54,6 +72,7 @@ public indirect enum LessonBlock: Sendable, Equatable, Identifiable {
         case let .table(headers, rows): "tbl:\(headers.first?.plain ?? "")\(rows.count)"
         case .divider: "hr:\(UUID().uuidString)"
         case let .disclosure(summary, _): "det:\(summary)"
+
         }
     }
 }
@@ -229,7 +248,34 @@ public enum LessonContentParser {
             }
         }
 
-        return InlineText(runs: collapse(runs))
+        return InlineText(runs: collapse(runs).flatMap(extractMath))
+    }
+
+    /// Splits a run on the `\( … \)` delimiters that carry formulas.
+    ///
+    /// Keyed off the delimiters rather than the `class="math"` wrapper because
+    /// the HTML scanner drops attributes — and because a formula written
+    /// without the wrapper still needs rendering.
+    private static func extractMath(_ run: InlineRun) -> [InlineRun] {
+        guard run.math == nil, !run.isCode, run.text.contains("\\(") else { return [run] }
+
+        return MathExpressionParser.segments(in: run.text).map { segment in
+            switch segment {
+            case let .prose(text):
+                return InlineRun(
+                    text: text, isBold: run.isBold, isItalic: run.isItalic, isCode: run.isCode
+                )
+            case let .formula(latex):
+                let nodes = MathExpressionParser.parse(latex)
+                return InlineRun(
+                    text: nodes.plain,
+                    isBold: run.isBold,
+                    isItalic: run.isItalic,
+                    isCode: run.isCode,
+                    math: nodes
+                )
+            }
+        }
     }
 
     /// Merges adjacent runs with identical styling, so a sentence split across
@@ -237,7 +283,7 @@ public enum LessonContentParser {
     private static func collapse(_ runs: [InlineRun]) -> [InlineRun] {
         var result: [InlineRun] = []
         for run in runs where !run.text.isEmpty {
-            if let last = result.last,
+            if let last = result.last, last.math == nil, run.math == nil,
                last.isBold == run.isBold, last.isItalic == run.isItalic, last.isCode == run.isCode {
                 result[result.count - 1] = InlineRun(
                     text: last.text + run.text,

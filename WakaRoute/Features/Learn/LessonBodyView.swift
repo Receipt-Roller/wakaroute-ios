@@ -66,19 +66,70 @@ private struct BlockView: View {
 // MARK: - Text
 
 /// Builds one `Text` from styled runs, so a bold phrase stays inside its
-/// sentence and wraps with it.
+/// sentence and wraps with it — and so does a formula.
 private struct InlineTextView: View {
     let text: InlineText
+    var textStyle: UIFont.TextStyle = .body
+
+    @Environment(\.displayScale) private var displayScale
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
-        text.runs.reduce(Text("")) { partial, run in
+        if text.hasMath {
+            // One label for the whole sentence: a stacked fraction is drawn, and
+            // a drawing says nothing. `spoken` reads 「2ぶんのx」 where the
+            // characters alone would say "x 2".
+            composed.accessibilityLabel(text.spoken)
+        } else {
+            composed
+        }
+    }
+
+    private var composed: Text {
+        let font = UIFont.preferredFont(
+            forTextStyle: textStyle,
+            compatibleWith: UITraitCollection(preferredContentSizeCategory: dynamicTypeSize.contentSizeCategory)
+        )
+        return text.runs.reduce(Text("")) { $0 + piece(for: $1, font: font) }
+    }
+
+    private func piece(for run: InlineRun, font: UIFont) -> Text {
+        guard let math = run.math else {
             var piece = Text(run.text)
-            if run.isCode {
-                piece = piece.font(.system(.body, design: .monospaced))
-            }
+            if run.isCode { piece = piece.font(.system(.body, design: .monospaced)) }
             if run.isBold { piece = piece.bold() }
             if run.isItalic { piece = piece.italic() }
-            return partial + piece
+            return piece
+        }
+
+        guard math.needsLayout,
+              let drawn = MathImageCache.shared.rendering(of: math, font: font, scale: displayScale)
+        else {
+            return MathText.text(math, font: font)
+        }
+
+        return Text(drawn.image).baselineOffset(-drawn.descent)
+    }
+}
+
+private extension DynamicTypeSize {
+    /// UIKit needs the size as a content size category to resolve a font, and
+    /// there is no conversion in either framework.
+    var contentSizeCategory: UIContentSizeCategory {
+        switch self {
+        case .xSmall: .extraSmall
+        case .small: .small
+        case .medium: .medium
+        case .large: .large
+        case .xLarge: .extraLarge
+        case .xxLarge: .extraExtraLarge
+        case .xxxLarge: .extraExtraExtraLarge
+        case .accessibility1: .accessibilityMedium
+        case .accessibility2: .accessibilityLarge
+        case .accessibility3: .accessibilityExtraLarge
+        case .accessibility4: .accessibilityExtraExtraLarge
+        case .accessibility5: .accessibilityExtraExtraExtraLarge
+        @unknown default: .large
         }
     }
 }
@@ -95,8 +146,17 @@ private struct HeadingView: View {
         }
     }
 
+    /// A formula in a heading has to be drawn at the heading's size.
+    private var textStyle: UIFont.TextStyle {
+        switch level {
+        case 1: .title2
+        case 2: .title3
+        default: .headline
+        }
+    }
+
     var body: some View {
-        InlineTextView(text: text)
+        InlineTextView(text: text, textStyle: textStyle)
             .font(font)
             .fixedSize(horizontal: false, vertical: true)
             .padding(.top, level <= 2 ? 6 : 2)
@@ -190,7 +250,7 @@ private struct LessonTableView: View {
     private func row(_ cells: [InlineText], isHeader: Bool) -> some View {
         HStack(alignment: .top, spacing: 16) {
             ForEach(Array(cells.enumerated()), id: \.offset) { _, cell in
-                InlineTextView(text: cell)
+                InlineTextView(text: cell, textStyle: .subheadline)
                     .font(isHeader ? .subheadline.weight(.semibold) : .subheadline)
                     .foregroundStyle(isHeader ? .secondary : .primary)
                     .frame(minWidth: 64, alignment: .leading)
