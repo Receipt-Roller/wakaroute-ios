@@ -24,11 +24,35 @@ public struct HTTPRequest: Sendable {
 public struct HTTPResponse: Sendable {
     public let status: Int
     public let body: Data
+    /// Response header fields, keyed case-insensitively.
+    ///
+    /// Only a caller that revalidates a cache needs these, so they are
+    /// defaulted away rather than forced on every construction site.
+    public let headers: HTTPHeaders
 
-    public init(status: Int, body: Data) {
+    public init(status: Int, body: Data, headers: HTTPHeaders = HTTPHeaders()) {
         self.status = status
         self.body = body
+        self.headers = headers
     }
+}
+
+/// Header fields that answer to any capitalisation.
+///
+/// HTTP field names are case-insensitive and servers disagree in practice —
+/// `ETag`, `Etag` and `etag` are the same field, and a plain dictionary lookup
+/// silently misses two of the three.
+public struct HTTPHeaders: Sendable, Equatable {
+    private let fields: [String: String]
+
+    public init(_ fields: [String: String] = [:]) {
+        self.fields = Dictionary(
+            fields.map { ($0.key.lowercased(), $0.value) },
+            uniquingKeysWith: { first, _ in first }
+        )
+    }
+
+    public subscript(field: String) -> String? { fields[field.lowercased()] }
 }
 
 /// Seam between our code and URLSession, so tests can drive the auth and
@@ -57,7 +81,16 @@ public struct URLSessionHTTPClient: HTTPClient {
             guard let http = response as? HTTPURLResponse else {
                 throw APIError.unknown("Response was not HTTP.")
             }
-            return HTTPResponse(status: http.statusCode, body: data)
+            let headers = HTTPHeaders(
+                Dictionary(
+                    http.allHeaderFields.compactMap { key, value in
+                        guard let field = key as? String, let text = value as? String else { return nil }
+                        return (field, text)
+                    },
+                    uniquingKeysWith: { first, _ in first }
+                )
+            )
+            return HTTPResponse(status: http.statusCode, body: data, headers: headers)
         } catch let error as URLError {
             switch error.code {
             case .notConnectedToInternet, .networkConnectionLost, .dataNotAllowed:
