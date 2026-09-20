@@ -48,7 +48,7 @@ struct LearnSplitView: View {
                     NavigationLink {
                         CardsView(viewModel: CardsViewModel(library: cards))
                     } label: {
-                        Label("単語カード・漢字カード", systemImage: "rectangle.on.rectangle.angled")
+                        Label("5教科のカード", systemImage: "rectangle.on.rectangle.angled")
                     }
                 }
             }

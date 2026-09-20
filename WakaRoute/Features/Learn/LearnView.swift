@@ -78,8 +78,8 @@ struct LearnView: View {
             } label: {
                 Label {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("単語カード・漢字カード").font(.body.weight(.medium))
-                        Text("電波がなくても使えます")
+                        Text("5教科のカード").font(.body.weight(.medium))
+                        Text("漢字・単語・数学・理科・社会。電波がなくても使えます")
                             .font(.footnote)
                             .foregroundStyle(.secondary)
                     }
