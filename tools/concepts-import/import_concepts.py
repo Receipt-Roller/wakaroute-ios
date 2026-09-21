@@ -94,6 +94,43 @@ def course_description(api, course_id, cache):
     return cache[course_id]
 
 
+def verify_against_live_content(api, org, concepts):
+    """Check the graph still matches what is published, before writing anything.
+
+    A renamed or withdrawn course would otherwise become a 理解要素 pointing at
+    nothing, and nothing downstream would say so.
+    """
+    paths = api.get(f"/api/v1/organizations/{org}/paths")
+    items = paths if isinstance(paths, list) else paths.get("items", [])
+
+    live = {}
+    for path in items:
+        labels = path.get("labels") or []
+        if "数学" not in labels:
+            continue
+        detail = api.get(f"/api/v1/paths/{path['id']}")
+        for course in detail.get("courses", []) or []:
+            live[course["id"]] = (path.get("name", ""), course.get("title", ""))
+
+    problems = []
+    for concept in concepts:
+        course_id = concept["externalId"]
+        if course_id not in live:
+            problems.append(f"公開されているどのパスにも無い: {concept['name']} ({course_id})")
+            continue
+        area, title = live[course_id]
+        if title and title != concept["name"]:
+            problems.append(f"名前が変わっています: 「{concept['name']}」 → 「{title}」")
+        if area and area != concept["area"]:
+            problems.append(f"領域が変わっています: {concept['name']} → {area}")
+
+    extra = set(live) - {c["externalId"] for c in concepts}
+    for course_id in sorted(extra):
+        problems.append(f"パスにあるがグラフに無い: {live[course_id][1]} ({course_id})")
+
+    return problems
+
+
 def existing_concepts(api, org):
     listing = api.get(f"/api/v1/organizations/{org}/concepts?includeInactive=true")
     items = listing if isinstance(listing, list) else listing.get("items", [])
@@ -108,6 +145,8 @@ def main():
     parser.add_argument("--apply", action="store_true", help="実際に書き込む（既定は dry-run）")
     parser.add_argument("--skip-descriptions", action="store_true",
                         help="コース説明を取得しない（説明は空のまま）")
+    parser.add_argument("--skip-verify", action="store_true",
+                        help="公開中のコースとの突き合わせを省く（推奨しません）")
     arguments = parser.parse_args()
 
     token = os.environ.get("MANABU2_TOKEN")
@@ -120,6 +159,16 @@ def main():
     mode = "APPLY" if arguments.apply else "DRY RUN（何も書き込みません）"
     print(f"=== {mode} ===")
     print(f"組織 {arguments.org} / 元データ基準日 {payloads.get('asOf')}\n")
+
+    if not arguments.skip_verify:
+        print("公開中のコースと突き合わせています…")
+        problems = verify_against_live_content(api, arguments.org, payloads["concepts"])
+        if problems:
+            print("\n公開されている内容と食い違っています。中止します。\n")
+            for problem in problems:
+                print(f"  - {problem}")
+            return 1
+        print(f"  {len(payloads['concepts'])} 件すべて一致\n")
 
     print("既存の理解要素を確認しています…")
     existing = existing_concepts(api, arguments.org)
