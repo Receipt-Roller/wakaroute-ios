@@ -39,6 +39,7 @@ struct MoreView: View {
                     LabeledContent("バージョン", value: Bundle.main.shortVersion)
                 }
             }
+            .readableWidth()
             .navigationTitle("その他")
         }
     }

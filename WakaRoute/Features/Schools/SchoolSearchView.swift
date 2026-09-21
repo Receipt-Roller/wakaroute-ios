@@ -113,6 +113,7 @@ struct SchoolSearchView: View {
                     }
                 }
             }
+            .readableWidth()
             .navigationTitle("高校を探す")
             .navigationDestination(for: String.self) { schoolId in
                 SchoolDetailView(
