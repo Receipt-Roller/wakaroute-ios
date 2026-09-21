@@ -47,3 +47,33 @@ footer is used only to identify and link to this project's GitHub repository.
 The high school information shown in this app is retrieved at runtime from
 wakaroute.com and originates from the dataset described above. This client does
 not bundle a copy of it.
+
+Study card data
+---------------
+
+The word, kanji and subject cards are retrieved at runtime from wakaroute.com.
+This client does not bundle a copy of them. Each dataset states its own licence,
+which the app displays in カード > データの出典とライセンス.
+
+English vocabulary (https://wakaroute.com/api/v1/english-words):
+
+  "NGSL 1.2" by Browne, C., Culligan, B., and Phillips, J., used under
+  CC BY-SA 4.0. https://creativecommons.org/licenses/by-sa/4.0/
+
+  "EJDict-hand" English-Japanese dictionary data by kujirahand and
+  contributors, used under CC0 1.0.
+  https://creativecommons.org/publicdomain/zero/1.0/
+
+Kanji (https://wakaroute.com/api/v1/kanji):
+
+  "KANJIDIC2" is copyright the Electronic Dictionary Research and Development
+  Group and is used under CC BY-SA 4.0.
+  https://creativecommons.org/licenses/by-sa/4.0/
+
+Mathematics, science and social studies cards
+(https://wakaroute.com/api/v1/study-cards) are authored by RECEIPTROLLER Inc.
+and covered by the Apache License 2.0 clause above.
+
+CC BY-SA 4.0 requires that attribution remain with the data wherever it is
+shown. Removing the licence screen, or shipping these cards without it, would
+breach that licence.
