@@ -30,7 +30,20 @@ struct LearnSplitView: View {
     let queue: LearningActionQueue?
     let cards: CardLibrary
 
-    @State private var subject: SubjectId?
+    /// What the sidebar has selected. Cards sit beside the 教科 rather than
+    /// behind a push: a `NavigationLink` here has no stack to push into, and a
+    /// tap on it did nothing at all.
+    private enum Selection: Hashable {
+        case subject(SubjectId)
+        case cards
+    }
+
+    @State private var selection: Selection?
+
+    private var subject: SubjectId? {
+        if case let .subject(id) = selection { return id }
+        return nil
+    }
 
     /// Wide enough for the 教科 名 and its progress, narrow enough to leave the
     /// course list the room it needs.
@@ -38,18 +51,15 @@ struct LearnSplitView: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            List(selection: $subject) {
+            List(selection: $selection) {
                 ForEach(catalog.subjects) { overview in
                     SubjectSidebarRow(overview: overview)
-                        .tag(overview.id)
+                        .tag(Selection.subject(overview.id))
                 }
 
                 Section {
-                    NavigationLink {
-                        CardsView(viewModel: CardsViewModel(library: cards))
-                    } label: {
-                        Label("5教科のカード", systemImage: "rectangle.on.rectangle.angled")
-                    }
+                    Label("5教科のカード", systemImage: "rectangle.on.rectangle.angled")
+                        .tag(Selection.cards)
                 }
             }
             .frame(width: Self.sidebarWidth)
@@ -57,7 +67,11 @@ struct LearnSplitView: View {
             Divider()
 
             Group {
-                if let subject, let overview = catalog.subjects.first(where: { $0.id == subject }) {
+                if selection == .cards {
+                    NavigationStack {
+                        CardsView(viewModel: CardsViewModel(library: cards))
+                    }
+                } else if let subject, let overview = catalog.subjects.first(where: { $0.id == subject }) {
                     // Its own stack, so a course and then a lesson push here
                     // while the 教科 list stays put.
                     NavigationStack {
@@ -85,8 +99,9 @@ struct LearnSplitView: View {
             // Landing on an empty pane would make the iPad *more* steps than the
             // phone, where the five 教科 are the first thing on screen. So one is
             // already chosen; the sidebar still shows which.
-            if subject == nil {
-                subject = catalog.subjects.first { !$0.isPlanned && !$0.isAwaitingContent }?.id
+            if selection == nil,
+               let first = catalog.subjects.first(where: { !$0.isPlanned && !$0.isAwaitingContent })?.id {
+                selection = .subject(first)
             }
         }
     }
