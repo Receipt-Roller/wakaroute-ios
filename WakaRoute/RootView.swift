@@ -47,6 +47,18 @@ struct RootView: View {
             // Cards sit two pushes inside 学ぶ, so design review gets a way
             // straight to them like the other deep screens.
             NavigationStack { CardsView(viewModel: CardsViewModel(library: services.cards)) }
+        } else if RootView.opensPractice {
+            // 練習 has no reachable entry until the organisation has 理解要素
+            // and published questions. This is the only way to look at it.
+            NavigationStack {
+                PracticeSessionView(
+                    viewModel: PracticeViewModel(
+                        client: services.practice,
+                        resumeStore: services.practiceResume,
+                        mode: .review
+                    )
+                )
+            }
         } else if RootView.opensJournal {
             // 受験日記 sits one push inside 記録; design review gets a way
             // straight to it like the other deep screens.
@@ -93,6 +105,10 @@ struct RootView: View {
         let arguments = ProcessInfo.processInfo.arguments
         guard let index = arguments.firstIndex(of: "-openLesson"), index + 1 < arguments.count else { return nil }
         return arguments[index + 1]
+    }
+
+    private static var opensPractice: Bool {
+        ProcessInfo.processInfo.arguments.contains("-openPractice")
     }
 
     private static var opensJournal: Bool {
@@ -205,6 +221,8 @@ struct AppServices {
     let cards: CardLibrary
     let journal: JournalClient
     let journalOutbox: JournalOutbox
+    let practice: PracticeClient
+    let practiceResume: any PracticeResumeStore
 
     @MainActor
     static func live(environment: AppEnvironment = .production) -> AppServices {
@@ -241,6 +259,11 @@ struct AppServices {
             environment: environment
         )
 
+        let practiceClient = PracticeClient(
+            http: AuthenticatedHTTPClient(underlying: http, session: auth),
+            environment: environment
+        )
+
         let structureCache = ContentStructureCache(
             store: Self.contentStructureStore(),
             content: contentClient
@@ -269,7 +292,12 @@ struct AppServices {
             // wakaroute.com, the same as 高校検索.
             cards: Self.cardLibrary(http: http, environment: environment),
             journal: journalClient,
-            journalOutbox: JournalOutbox(store: Self.journalOutboxStore(), client: journalClient)
+            journalOutbox: JournalOutbox(store: Self.journalOutboxStore(), client: journalClient),
+            practice: practiceClient,
+            // Losing this costs the thread back to an unfinished session, not
+            // any answer: everything answered is already on the server.
+            practiceResume: (try? FilePracticeResumeStore.inApplicationSupport())
+                ?? InMemoryPracticeResumeStore()
         )
     }
 
