@@ -47,6 +47,17 @@ struct RootView: View {
             // Cards sit two pushes inside 学ぶ, so design review gets a way
             // straight to them like the other deep screens.
             NavigationStack { CardsView(viewModel: CardsViewModel(library: services.cards)) }
+        } else if RootView.opensJournal {
+            // 受験日記 sits one push inside 記録; design review gets a way
+            // straight to it like the other deep screens.
+            NavigationStack {
+                JournalDayView(
+                    viewModel: JournalViewModel(
+                        client: services.journal,
+                        outbox: services.journalOutbox
+                    )
+                )
+            }
         } else if let document = RootView.debugDocument {
             NavigationStack { LegalDocumentView(document: document) }
         } else if RootView.opensFeedback {
@@ -82,6 +93,10 @@ struct RootView: View {
         let arguments = ProcessInfo.processInfo.arguments
         guard let index = arguments.firstIndex(of: "-openLesson"), index + 1 < arguments.count else { return nil }
         return arguments[index + 1]
+    }
+
+    private static var opensJournal: Bool {
+        ProcessInfo.processInfo.arguments.contains("-openJournal")
     }
 
     private static var opensMap: Bool {
@@ -127,7 +142,15 @@ struct RootView: View {
                 .tabItem { Label("学ぶ", systemImage: "book") }
                 .tag(1)
 
-            StudyRecordView(viewModel: StudyRecordViewModel(timer: services.studyTimer, sync: services.studySync, content: services.content))
+            StudyRecordView(
+                viewModel: StudyRecordViewModel(
+                    timer: services.studyTimer,
+                    sync: services.studySync,
+                    content: services.content
+                ),
+                journal: services.journal,
+                journalOutbox: services.journalOutbox
+            )
                 .tabItem { Label("記録", systemImage: "clock") }
                 .tag(2)
 
@@ -155,6 +178,15 @@ struct RootView: View {
     }
 }
 
+#if DEBUG
+/// Answers every request the way a phone in a tunnel does.
+private struct OfflineHTTPClient: HTTPClient {
+    func send(_ request: HTTPRequest) async throws -> HTTPResponse {
+        throw APIError.offline
+    }
+}
+#endif
+
 /// Wiring, assembled once at launch. Screens receive what they need rather than
 /// reaching for singletons, which is what keeps them previewable and testable.
 struct AppServices {
@@ -171,10 +203,12 @@ struct AppServices {
     let contentStructure: ContentStructureCache
     let versionGate: AppVersionGate
     let cards: CardLibrary
+    let journal: JournalClient
+    let journalOutbox: JournalOutbox
 
     @MainActor
     static func live(environment: AppEnvironment = .production) -> AppServices {
-        let http = URLSessionHTTPClient()
+        let http = Self.httpClient()
         let store = KeychainSecretStore(service: environment.keychainService)
 
         let auth = AuthSession(
@@ -198,6 +232,11 @@ struct AppServices {
         )
 
         let contentClient = ContentClient(
+            http: AuthenticatedHTTPClient(underlying: http, session: auth),
+            environment: environment
+        )
+
+        let journalClient = JournalClient(
             http: AuthenticatedHTTPClient(underlying: http, session: auth),
             environment: environment
         )
@@ -228,8 +267,38 @@ struct AppServices {
             versionGate: AppVersionGate(http: http, environment: environment),
             // Unauthenticated too: the card sets are public data on
             // wakaroute.com, the same as 高校検索.
-            cards: Self.cardLibrary(http: http, environment: environment)
+            cards: Self.cardLibrary(http: http, environment: environment),
+            journal: journalClient,
+            journalOutbox: JournalOutbox(store: Self.journalOutboxStore(), client: journalClient)
         )
+    }
+
+    /// `-offline` makes every request fail as though there were no connection.
+    ///
+    /// The app's central promise is that **通信状況で学習が消えません**, and that
+    /// promise is only ever kept by code paths that are hard to reach on a desk
+    /// with working Wi-Fi. This makes them reachable. Compiled out of release
+    /// builds entirely, so there is no switch a shipped app could flip.
+    private static func httpClient() -> any HTTPClient {
+        #if DEBUG
+        if ProcessInfo.processInfo.arguments.contains("-offline") {
+            return OfflineHTTPClient()
+        }
+        #endif
+        return URLSessionHTTPClient()
+    }
+
+    /// Same fallback as the other queues — except that what is waiting here is
+    /// something the student wrote in their own words. Falling back to memory
+    /// means a diary typed offline survives until the app is killed, rather
+    /// than not at all.
+    private static func journalOutboxStore() -> any JournalOutboxStore {
+        do {
+            return try FileJournalOutboxStore.inApplicationSupport()
+        } catch {
+            logger.error("Could not open the journal outbox; unsent entries are memory-only.")
+            return InMemoryJournalOutboxStore()
+        }
     }
 
     /// Card sets are large but public: losing the cache costs one download.

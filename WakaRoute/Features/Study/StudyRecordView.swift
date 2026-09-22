@@ -1,15 +1,22 @@
 import SwiftUI
 import WakaRouteKit
 
-/// 記録 — the timer, a month calendar, and what was actually studied.
+/// 記録 — the timer, the day's journal, a month calendar, and what was studied.
 struct StudyRecordView: View {
     @State var viewModel: StudyRecordViewModel
+    /// Nil in the previews and design fixtures that have no account behind
+    /// them; the 受験日記 card is then simply not offered.
+    var journal: JournalClient?
+    var journalOutbox: JournalOutbox?
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 28) {
                     TimerCard(viewModel: viewModel)
+                    if let journal, let journalOutbox {
+                        JournalCard(client: journal, outbox: journalOutbox)
+                    }
                     CalendarSection(viewModel: viewModel)
                     ActivitySection(
                         sessions: viewModel.sessions,
@@ -117,6 +124,47 @@ private struct TimerCard: View {
     private func spokenElapsed(of session: StudySession) -> String {
         let minutes = Int(session.duration(asOf: viewModel.tick)) / 60
         return minutes < 1 ? "1分未満" : "\(minutes)分"
+    }
+}
+
+// MARK: - Journal
+
+/// The way into 受験日記 from 記録.
+///
+/// A card rather than a tab of its own: the diary is about the day that the
+/// timer and the calendar are also about, and splitting them would mean
+/// answering 「きょう何をした？」 in two places.
+private struct JournalCard: View {
+    let client: JournalClient
+    let outbox: JournalOutbox
+
+    var body: some View {
+        NavigationLink {
+            JournalDayView(viewModel: JournalViewModel(client: client, outbox: outbox))
+        } label: {
+            HStack(spacing: 14) {
+                Image(systemName: "text.book.closed")
+                    .font(.title3)
+                    .foregroundStyle(.tint)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("受験日記").font(.headline)
+                    Text("できたこと、困ったこと、明日やること")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.right").font(.caption).foregroundStyle(.tertiary)
+            }
+            .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16))
+        }
+        .buttonStyle(.plain)
+        .accessibilityHint("その日にやったことを記録します")
     }
 }
 
